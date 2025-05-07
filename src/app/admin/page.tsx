@@ -20,6 +20,12 @@ export default function AdminPage() {
   const [totalTrips, setTotalTrips] = useState(0);
   const [emergencyNumber, setEmergencyNumber] = useState(0);
 
+  // Notifications state
+  const [notifications, setNotifications] = useState<Array<{id: number; message: string; status: string;}>>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [errorNotifications, setErrorNotifications] = useState<string | null>(null);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+
   // Fetch dashboard stats on mount
   useEffect(() => {
     const fetchDashboardStats = async () => {
@@ -37,7 +43,50 @@ export default function AdminPage() {
       }
     };
     fetchDashboardStats();
+    fetchNotifications();
   }, []);
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    setErrorNotifications(null);
+    try {
+      const response = await fetch('/api/notifications');
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data.notifications);
+      } else {
+        setErrorNotifications('Failed to fetch notifications');
+      }
+    } catch (error) {
+      setErrorNotifications('Error fetching notifications');
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const updateNotificationStatus = async (id: number, status: string) => {
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setNotifications((prev) =>
+            prev.map((notif) => (notif.id === id ? { ...notif, status } : notif))
+          );
+        } else {
+          alert('Failed to update notification status');
+        }
+      } else {
+        alert('Failed to update notification status');
+      }
+    } catch (error) {
+      alert('Error updating notification status');
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, files } = e.target;
@@ -126,6 +175,10 @@ export default function AdminPage() {
     }
   };
 
+  const filteredNotifications = showAllNotifications
+    ? notifications
+    : notifications.filter((notif) => notif.status === 'pending');
+
   return (
     <main className="colour-black">
       <div className="bg-white min-h-screen p-6 relative">
@@ -142,16 +195,25 @@ export default function AdminPage() {
                 className="flex items-center space-x-6 bg-[#E3E3E3] rounded-full px-6 py-2 text-sm font-normal"
               >
                 <li>
-                  <a
-                    href="#"
-                    className="text-[#5B6FFB] font-normal leading-5"
-                  >
-                    Dashboard
-                  </a>
+                  <Link href="/admin" legacyBehavior>
+                    <a className="text-[#5B6FFB] font-normal leading-5">Dashboard</a>
+                  </Link>
                 </li>
-                <li><a href="#" className="text-black font-normal leading-5">Students</a></li>
-                <li><a href="#" className="text-black font-normal leading-5">Emergency</a></li>
-                <li><a href="#" className="text-black font-normal leading-5">Settings</a></li>
+                <li>
+                  <Link href="/admin/students" legacyBehavior>
+                    <a className="text-black font-normal leading-5">Students</a>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/emergency" legacyBehavior>
+                    <a className="text-black font-normal leading-5">Emergency</a>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/settings" legacyBehavior>
+                    <a className="text-black font-normal leading-5">Settings</a>
+                  </Link>
+                </li>
               </ul>
             </nav>
             <button
@@ -172,46 +234,78 @@ export default function AdminPage() {
 
           <main className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <section
-              className="col-span-2 border border-gray-300 rounded-2xl p-10 flex flex-col justify-center"
+              className="col-span-2 border border-gray-300 rounded-2xl p-6 min-h-[200px] text-base font-normal text-[#000000] overflow-y-auto"
             >
-              <h1 className="text-5xl font-extrabold leading-tight mb-10 max-w-[420px] text-[#000000]">
-                Let’s create<br />
-                new <span className="text-[#5B6FFB]">trip</span>
-              </h1>
-              <form className="flex flex-wrap gap-6 max-w-[600px]">
-                <input
-                  type="text"
-                  placeholder="Search students by name"
-                  className="flex-grow rounded-full bg-[#D9D9D9] px-6 py-4 text-gray-600 placeholder-gray-600 text-base font-normal focus:outline-none"
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                />
-                <Link href="/admin/trips" passHref legacyBehavior>
-                  <a className="bg-[#5B6FFB] text-white rounded-full px-8 py-4 text-base font-normal whitespace-nowrap inline-block text-center">
-                    Add new trip
-                  </a>
-                </Link>
-              </form>
-              {searchResults.length > 0 && (
-                <ul className="mt-4 max-w-[600px] bg-white border border-gray-300 rounded-lg shadow-md overflow-hidden">
-                  {searchResults.map((student) => (
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Alert Notifications</h3>
+                <div>
+                  <button
+                    onClick={fetchNotifications}
+                    className="text-blue-600 hover:underline text-sm mr-4"
+                    aria-label="Refresh notifications"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={() => setShowAllNotifications(!showAllNotifications)}
+                    className="text-blue-600 hover:underline text-sm"
+                    aria-label={showAllNotifications ? "Show pending notifications" : "Show all notifications"}
+                  >
+                    {showAllNotifications ? "Show Pending" : "Show All"}
+                  </button>
+                </div>
+              </div>
+              {loadingNotifications ? (
+                <p>Loading notifications...</p>
+              ) : errorNotifications ? (
+                <p className="text-red-600">{errorNotifications}</p>
+              ) : filteredNotifications.length === 0 ? (
+                <p>No notifications available.</p>
+              ) : (
+                <ul className="space-y-3 max-h-[300px] overflow-y-auto">
+                  {filteredNotifications.map((notif) => (
                     <li
-                      key={student.id}
-                      className="px-4 py-2 border-b border-gray-200 last:border-b-0 cursor-pointer"
-                      onClick={() => setSelectedStudent(student)}
+                      key={notif.id}
+                      className="border border-gray-300 rounded p-3 flex flex-col space-y-2"
                     >
-                      <p className="font-semibold text-gray-900">{student.name}</p>
-                      <p className="text-gray-600">{student.phone}</p>
+                      <p>{notif.message}</p>
+                      <div className="flex space-x-2">
+                        {!showAllNotifications && (
+                          <>
+                            <button
+                              onClick={() => updateNotificationStatus(notif.id, 'approved')}
+                              disabled={notif.status === 'approved'}
+                              className={`px-3 py-1 rounded text-white ${
+                                notif.status === 'approved' ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+                              }`}
+                              aria-label="Approve notification"
+                            >
+                              &#10003;
+                            </button>
+                            <button
+                              onClick={() => updateNotificationStatus(notif.id, 'disapproved')}
+                              disabled={notif.status === 'disapproved'}
+                              className={`px-3 py-1 rounded text-white ${
+                                notif.status === 'disapproved' ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                              }`}
+                              aria-label="Disapprove notification"
+                            >
+                              &#10007;
+                            </button>
+                          </>
+                        )}
+                        <span
+                          className={`ml-auto font-semibold capitalize ${
+                            notif.status === 'approved' ? 'text-green-700' : notif.status === 'disapproved' ? 'text-red-700' : 'text-gray-700'
+                          }`}
+                        >
+                          {notif.status}
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
               )}
-            </section>
-
-            <section
-              className="border border-gray-300 rounded-2xl p-6 min-h-[200px] text-base font-normal text-[#000000]"
-            >
-              Alert Notifications
             </section>
 
             <section className="col-span-2 grid grid-cols-2 gap-6">
