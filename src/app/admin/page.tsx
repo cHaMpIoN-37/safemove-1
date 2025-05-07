@@ -14,6 +14,31 @@ export default function AdminPage() {
   const [searchResults, setSearchResults] = useState<Array<{id: number; name: string; phone: string; image: string | null; status?: string;}>>([]);
   const [selectedStudent, setSelectedStudent] = useState<null | {id: number; name: string; phone: string; image: string | null; status?: string;}>(null);
 
+  // New state for dashboard stats
+  const [studentsIn, setStudentsIn] = useState(0);
+  const [studentsOut, setStudentsOut] = useState(0);
+  const [totalTrips, setTotalTrips] = useState(0);
+  const [emergencyNumber, setEmergencyNumber] = useState(0);
+
+  // Fetch dashboard stats on mount
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        const response = await fetch('/api/dashboard');
+        if (response.ok) {
+          const data = await response.json();
+          setStudentsIn(data.studentsIn);
+          setStudentsOut(data.studentsOut);
+          setTotalTrips(data.totalTrips);
+          setEmergencyNumber(data.emergencyNumber);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+      }
+    };
+    fetchDashboardStats();
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, files } = e.target;
     if (name === 'image' && files) {
@@ -198,7 +223,7 @@ export default function AdminPage() {
                     Number of<br />
                     <span className="text-gray-400 font-extrabold ">Students out</span>
                   </p>
-                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">45</h2>
+                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">{studentsOut}</h2>
                 </div>
                 <div
                   className="absolute top-6 right-6 bg-[#E3E3E3] rounded-full w-10 h-10 flex items-center justify-center text-[#5B6FFB]"
@@ -215,7 +240,7 @@ export default function AdminPage() {
                     Number of<br />
                     <span className="text-gray-400 font-extrabold">Students in</span>
                   </p>
-                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">23</h2>
+                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">{studentsIn}</h2>
                 </div>
                 <div
                   className="absolute top-6 right-6 bg-[#E3E3E3] rounded-full w-10 h-10 flex items-center justify-center text-[#5B6FFB]"
@@ -232,7 +257,7 @@ export default function AdminPage() {
                     Total trip<br />
                     <span className="text-gray-400 font-extrabold">Completed</span>
                   </p>
-                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">20</h2>
+                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">{totalTrips}</h2>
                 </div>
                 <div
                   className="absolute top-6 right-6 bg-[#E3E3E3] rounded-full w-10 h-10 flex items-center justify-center text-[#5B6FFB]"
@@ -249,7 +274,7 @@ export default function AdminPage() {
                     Emergency<br />
                     <span className="text-gray-400 font-extrabold">Number</span>
                   </p>
-                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">01</h2>
+                  <h2 className="text-5xl font-extrabold text-[#5B6FFB] mt-2">{emergencyNumber.toString().padStart(2, '0')}</h2>
                 </div>
                 <div
                   className="absolute top-6 right-6 bg-[#E3E3E3] rounded-full w-10 h-10 flex items-center justify-center text-[#5B6FFB]"
@@ -388,21 +413,30 @@ export default function AdminPage() {
                 <div className="flex flex-col justify-center h-full">
                   <h2 className="text-3xl font-semibold text-[#000000]">{selectedStudent.name}</h2>
                   <p className="text-lg text-gray-700 mt-2">{selectedStudent.phone}</p>
-                  <div className="flex items-center space-x-3 mt-4">
-                    <span
-                      className={`w-5 h-5 rounded-full inline-block ${
-                        selectedStudent.status === 'inside hostel' ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                      aria-label={selectedStudent.status}
-                    ></span>
-                    <span className="text-lg text-gray-700 capitalize">{selectedStudent.status}</span>
-                  </div>
-                </div>
+              <div className="flex items-center space-x-3 mt-4">
+                <span
+                  className={`w-5 h-5 rounded-full inline-block ${
+                    selectedStudent.status === 'inside hostel' ? 'bg-green-500' : 'bg-red-500'
+                  }`}
+                  aria-label={selectedStudent.status}
+                ></span>
+                <span className="text-lg text-gray-700 capitalize">{selectedStudent.status}</span>
               </div>
+              {selectedStudent.status === 'inside hostel' && (
+                <div className="mt-6">
+                  <Link href={`/admin/trips?preselectedStudentId=${selectedStudent.id}`} passHref legacyBehavior>
+                    <a className="inline-block bg-blue-600 text-white px-6 py-3 rounded-full hover:bg-blue-700 transition-colors text-center">
+                      Plan the trip
+                    </a>
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+    </>
+  )}
       </div>
     </main>
   );

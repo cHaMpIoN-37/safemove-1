@@ -1,112 +1,189 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import QRScanner from '../../components/QRScanner';
 
 export default function UserPage() {
   const [scanning, setScanning] = useState(false);
   const [decodedText, setDecodedText] = useState<string | null>(null);
+  const [durationHours, setDurationHours] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState<string>('');
+  const html5QrcodeScannerRef = useRef<any>(null);
   const router = useRouter();
 
-  const handleScan = (text: string) => {
-    setDecodedText(text);
-    // Do not stop scanning automatically to keep camera view active
-    // setScanning(false);
+  // Function to start the scanner
+  const startScanner = async () => {
+    if (scanning) return;
+    setDecodedText(null);
+    setDurationHours(null);
+    setCountdown('');
+    setScanning(true);
+
+    // Dynamically import html5-qrcode
+    const { Html5Qrcode } = await import('html5-qrcode');
+
+    if (html5QrcodeScannerRef.current) {
+      await html5QrcodeScannerRef.current.stop().catch(() => {});
+      html5QrcodeScannerRef.current.clear().catch(() => {});
+    }
+
+    html5QrcodeScannerRef.current = new Html5Qrcode('reader');
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0,
+      disableFlip: false,
+    };
+
+    html5QrcodeScannerRef.current
+      .start(
+        { facingMode: 'environment' },
+        config,
+        (decodedResult: any) => {
+          try {
+            const parsed = JSON.parse(decodedResult);
+            if (parsed.content && parsed.durationHours && parsed.createdAt) {
+              setDecodedText(parsed.content);
+              setDurationHours(parsed.durationHours);
+              startCountdown(parsed.createdAt, parsed.durationHours);
+              // Automatically navigate to trips page with durationHours
+              router.push(`/user/trips?durationHours=${parsed.durationHours}`);
+            } else {
+              setDecodedText(decodedResult);
+              setDurationHours(null);
+              setCountdown('');
+            }
+          } catch {
+            setDecodedText(decodedResult);
+            setDurationHours(null);
+            setCountdown('');
+          }
+        },
+        (errorMessage: any) => {
+          // console.log('QR Code no match:', errorMessage);
+        }
+      )
+      .catch((err: any) => {
+        console.error('Unable to start scanning.', err);
+        setScanning(false);
+      });
   };
 
-  const stopScanning = () => {
-    setScanning(false);
+  // Function to stop the scanner
+  const stopScanner = () => {
+    if (html5QrcodeScannerRef.current) {
+      html5QrcodeScannerRef.current.stop().then(() => {
+        html5QrcodeScannerRef.current.clear();
+        setScanning(false);
+      }).catch(() => {
+        setScanning(false);
+      });
+    } else {
+      setScanning(false);
+    }
   };
+
+  // Countdown timer logic
+  const startCountdown = (createdAt: number, durationHours: number) => {
+    const endTime = createdAt + durationHours * 3600 * 1000;
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      const diff = endTime - now;
+      if (diff <= 0) {
+        setCountdown('Session expired');
+        stopScanner();
+        return;
+      }
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setCountdown(
+        `Time left: ${hours}h ${minutes}m ${seconds}s`
+      );
+    };
+
+    updateCountdown();
+    const intervalId = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(intervalId);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrcodeScannerRef.current) {
+        html5QrcodeScannerRef.current.stop().catch(() => {});
+        html5QrcodeScannerRef.current.clear().catch(() => {});
+      }
+    };
+  }, []);
 
   const goToTrip = () => {
-    router.push('/user/trips');
+    if (durationHours !== null) {
+      router.push(`/user/trips?durationHours=${durationHours}`);
+    } else {
+      router.push('/user/trips');
+    }
   };
 
   return (
     <main>
-      <div className="bg-gradient-to-b from-[#dbe1ff] to-white min-h-screen flex justify-center items-center p-4">
-        <div className="relative w-[390px] h-[844px] rounded-[40px] border border-black/20 shadow-lg bg-gradient-to-b from-[#dbe1ff] to-white flex flex-col items-center pt-14 px-6">
-          <p className="text-[9px] text-center text-black/40 font-mono uppercase tracking-widest leading-[10px]">
-            YOUR LOCATION ACCESSED
-            <br />
-            FOR SAFETY POLICY
-          </p>
-          <h1 className="mt-6 text-[40px] font-extrabold text-black leading-[44px] text-center max-w-[280px]">
-            let’s start
-            <br />
-            your
-            <span className="text-[#5f7aff]">
-              trip
-            </span>
-          </h1>
-          <div className="mt-10 w-full max-w-[320px] rounded-[24px] bg-white border border-black/10 shadow-sm flex flex-col overflow-hidden">
-            <p className="text-[9px] font-mono text-center text-black/40 pt-3 select-none">
-              ALIGN CAMERA TO QR
-            </p>
-            <div className="flex justify-center items-center my-6">
-              {scanning ? (
-                <QRScanner onScan={handleScan} />
-              ) : (
-                <img alt="Light blue square placeholder representing QR code scanning area" className="rounded-[16px]" height="160" src="https://storage.googleapis.com/a1aa/image/125557e8-127c-489a-b595-f3eb09292e5d.jpg" width="160" />
-              )}
-            </div>
-            <div className="bg-[#dbe1ff] py-5 flex justify-center space-x-4">
-              {scanning ? (
-                <>
-                  <button
-                    className="bg-red-600 text-white text-[14px] font-medium rounded-[24px] px-10 py-2 hover:bg-red-700 transition"
-                    type="button"
-                    onClick={stopScanning}
-                  >
-                    Stop Scanning
-                  </button>
-                  <button
-                    className="bg-green-600 text-white text-[14px] font-medium rounded-[24px] px-10 py-2 hover:bg-green-700 transition"
-                    type="button"
-                    onClick={goToTrip}
-                  >
-                    Go to Trip
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="bg-[#2f49f9] text-white text-[14px] font-medium rounded-[24px] px-10 py-2 hover:bg-[#2439c7] transition"
-                    type="button"
-                    onClick={() => setScanning(true)}
-                  >
-                    Scan QR code
-                  </button>
-                  <button
-                    className="bg-green-600 text-white text-[14px] font-medium rounded-[24px] px-10 py-2 hover:bg-green-700 transition"
-                    type="button"
-                    onClick={goToTrip}
-                  >
-                    Go to Trip
-                  </button>
-                </>
-              )}
-            </div>
-            {decodedText && (
-              <div className="mt-4 text-center text-green-600 font-semibold">
-                Scanned QR Code: {decodedText}
-              </div>
-            )}
+      <div
+        className="w-screen h-screen flex justify-center items-center p-4 bg-cover bg-center"
+        style={{ backgroundImage: "url('/ChatGPT Image May 6, 2025, 08_23_45 PM.png')" }}
+      >
+        <div className="container bg-[#cce0ff] p-5 rounded-lg shadow-md max-w-[350px] w-full text-center">
+          <h2 className="text-[#003366] mb-5 text-xl font-semibold">Scan QR to Start Session</h2>
+
+          <div className="scrollable-camera-container mx-auto mb-4 border-2 border-[#3399ff] rounded-xl overflow-y-auto relative bg-[#e6f0ff]" style={{ height: '320px', maxWidth: '320px', animation: 'scrollPulse 3s ease-in-out infinite' }}>
+            <div id="reader" className="w-full h-full" />
           </div>
-          <div className="mt-10 flex gap-6 bg-[#e6e6e6] rounded-[40px] px-6 py-4 shadow-inner" style={{ boxShadow: 'inset 0 0 10px #cfcfcf' }}>
-            <button aria-label="Settings" className="w-12 h-12 rounded-full bg-[#4a4a4a] flex justify-center items-center text-white text-xl" type="button">
-              <i className="fas fa-cog" />
+
+          {!scanning ? (
+            <button
+              onClick={startScanner}
+              className="bg-[#0066cc] text-white px-5 py-3 rounded-md text-lg hover:bg-[#004d99] transition"
+              type="button"
+            >
+              Start Camera Scanner
             </button>
-            <button aria-label="Share" className="w-12 h-12 rounded-full bg-[#4a4a4a] flex justify-center items-center text-white text-xl" type="button">
-              <i className="fas fa-share-alt" />
+          ) : (
+            <button
+              onClick={stopScanner}
+              className="bg-red-600 text-white px-5 py-3 rounded-md text-lg hover:bg-red-700 transition"
+              type="button"
+            >
+              Stop Camera Scanner
             </button>
+          )}
+
+          {decodedText && (
+            <div id="sessionArea" className="mt-5 text-left text-[#003366] text-base">
+              <p><strong>Session:</strong> {decodedText}</p>
+              {durationHours !== null && <p><strong>Duration:</strong> {durationHours} hours</p>}
+              {countdown && <p id="countdown" className="font-bold">{countdown}</p>}
+            </div>
+          )}
+
+          <div className="mt-8 flex justify-center space-x-4">
+            {/* Removed Go to Trip button as navigation will happen automatically on successful scan */}
           </div>
-          <button aria-label="Chat" className="absolute bottom-10 right-10 w-14 h-14 rounded-full bg-[#b7ff00] shadow-[0_0_20px_6px_rgba(183,255,0,0.7)] flex justify-center items-center text-black text-2xl" type="button">
-            <i className="fas fa-comment-alt" />
-          </button>
         </div>
+
       </div>
+
+      <style jsx>{`
+        @keyframes scrollPulse {
+          0%, 100% {
+            box-shadow: 0 0 10px 2px #3399ff;
+          }
+          50% {
+            box-shadow: 0 0 20px 6px #3399ff;
+          }
+        }
+      `}</style>
     </main>
   );
 }
